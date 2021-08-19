@@ -31,7 +31,8 @@ llvm::PreservedAnalyses DFlattening::run(llvm::Module &M,
   bool Changed = runOnModule(M);
 
   MPM->addPass(createModuleToFunctionPassAdaptor(SCCPPass()));
-
+  MPM->addPass(createModuleToFunctionPassAdaptor(PromotePass()));
+  MPM->addPass(IPSCCPPass());
   MPM->addPass(createModuleToFunctionPassAdaptor(ADCEPass()));
   MPM->addPass(createModuleToFunctionPassAdaptor(SimplifyCFGPass()));
 
