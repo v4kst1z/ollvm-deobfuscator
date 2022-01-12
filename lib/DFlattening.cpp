@@ -8,6 +8,9 @@
 
 #include "../include/DFlattening.h"
 
+#include <unordered_set>
+
+#include "llvm/ADT/MapVector.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
@@ -18,12 +21,12 @@
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Mem2Reg.h"
+#include "llvm/Transforms/Utils/ValueMapper.h"
 
 using namespace llvm;
 
 llvm::PreservedAnalyses DFlattening::run(llvm::Module &M,
                                          llvm::ModuleAnalysisManager &MAM) {
-
   auto MPM = std::make_unique<ModulePassManager>();
   MPM->addPass(createModuleToFunctionPassAdaptor(SimplifyCFGPass()));
   MPM->run(M, MAM);
@@ -46,10 +49,9 @@ bool DFlattening::runOnModule(llvm::Module &M) {
   bool Changed = false;
 
   for (auto &F : M) {
-    if (F.isDeclaration())
-      continue;
+    if (F.isDeclaration()) continue;
     Changed |= runOnFunction(F);
-    Changed |= EliminateUnreachableBlocks(F);
+    // Changed |= EliminateUnreachableBlocks(F);
   }
 
   return Changed;
@@ -61,19 +63,16 @@ bool DFlattening::runOnFunction(llvm::Function &Func) {
   auto *brInst = entryBlock.getTerminator();
 
   // 第一个基本块的最后一条指令为跳转指令
-  if (brInst->getOpcode() != Instruction::Br)
-    return false;
+  if (brInst->getOpcode() != Instruction::Br) return false;
 
   // 第二个基本块
   auto *switchBlock = dyn_cast<BasicBlock>(brInst->getOperand(0));
-  if (switchBlock == nullptr)
-    return false;
+  if (switchBlock == nullptr) return false;
 
   // 第二个基本快的最后一条指令必须为 switch
   auto *switchInst = dyn_cast<SwitchInst>(switchBlock->getTerminator());
 
-  if (switchInst == nullptr)
-    return false;
+  if (switchInst == nullptr) return false;
 
   std::unordered_set<Value *> bbTerValSet;
   for (auto caseIter = switchInst->case_begin();
@@ -81,8 +80,7 @@ bool DFlattening::runOnFunction(llvm::Function &Func) {
     bbTerValSet.insert(
         caseIter->getCaseSuccessor()->getTerminator()->getOperand(0));
   }
-  if (bbTerValSet.size() != 1 && bbTerValSet.size() != 2)
-    return false;
+  if (bbTerValSet.size() != 1 && bbTerValSet.size() != 2) return false;
 
   //现在基本上可以判断这个函数有控制流平坦化混淆
 
@@ -94,8 +92,7 @@ bool DFlattening::runOnFunction(llvm::Function &Func) {
   errs() << "switch 基本块 :\n";
   for (auto &BB : Func) {
     auto *switchInst = dyn_cast<SwitchInst>(BB.getTerminator());
-    if (switchInst == nullptr)
-      continue;
+    if (switchInst == nullptr) continue;
     switchBBs.push_back(&BB);
     switchBBSet.insert(&BB);
     errs() << BB.getName().str().c_str() << "\n";
@@ -125,8 +122,7 @@ bool DFlattening::runOnFunction(llvm::Function &Func) {
           loopEndBB = dyn_cast<BasicBlock>(lastInst->getOperand(0));
         continue;
       }
-      if (lastInst->getOpcode() == Instruction::Ret)
-        retBBs.push_back(BB);
+      if (lastInst->getOpcode() == Instruction::Ret) retBBs.push_back(BB);
     }
   }
 
@@ -196,19 +192,16 @@ bool DFlattening::runOnFunction(llvm::Function &Func) {
       auto *prevInst = brSInst;
 
       // 如果基本块最后一条指令不是 Br， 则跳过
-      if (brSInst->getOpcode() != Instruction::Br)
-        continue;
+      if (brSInst->getOpcode() != Instruction::Br) continue;
 
       // loopEndBB 也含有符合指令，但是 loopEndBB 不需要修改
-      if (sBB == loopEndBB)
-        continue;
+      if (sBB == loopEndBB) continue;
 
       while (true) {
         // 从后往前迭代寻找基本块里符合条件的决定后继基本块的 store 指令
         prevInst = prevInst->getPrevNonDebugInstruction();
         if (prevInst->getOpcode() == Instruction::Store &&
             switchVarAddr.count(prevInst->getOperand(1))) {
-
           // store 指令第一个参数为寄存器
           if (nullptr == dyn_cast<ConstantInt>(prevInst->getOperand(0))) {
             // %33 = select i1 %32, i32 -2054979789, i32 1857292562,
@@ -309,8 +302,7 @@ bool DFlattening::runOnFunction(llvm::Function &Func) {
 
   while (true) {
     // for (size_t idx = 1; idx < switchBBs.size(); idx++) {
-    if (iterBB == loopEndBB)
-      break;
+    if (iterBB == loopEndBB) break;
     prevBBs.push_back(iterBB);
     errs() << "prevBBs size is " << prevBBs.size() << "\n";
 
@@ -320,8 +312,7 @@ bool DFlattening::runOnFunction(llvm::Function &Func) {
          caseIter != bbSwitchInst->case_end(); caseIter++) {
       // 分支指向的基本块
       auto *sBB = caseIter->getCaseSuccessor();
-      if (switchBBSet.count(sBB) || sBB == loopEndBB)
-        continue;
+      if (switchBBSet.count(sBB) || sBB == loopEndBB) continue;
 
       ValueToValueMapTy bbValMap;
 
@@ -329,8 +320,7 @@ bool DFlattening::runOnFunction(llvm::Function &Func) {
       IRBuilder<> bInstBuilder(sBB->getFirstNonPHIOrDbgOrLifetime());
       for (auto editBB : prevBBs) {
         for (auto &Inst : *editBB) {
-          if (Inst.getOpcode() == Instruction::Switch)
-            break;
+          if (Inst.getOpcode() == Instruction::Switch) break;
 
           Instruction *instClone = Inst.clone();
           RemapInstruction(instClone, bbValMap, RF_IgnoreMissingLocals);
@@ -346,14 +336,12 @@ bool DFlattening::runOnFunction(llvm::Function &Func) {
 
       //如果基本块为 ret 块，不需要插入后驱指令，跳过
       auto *lastInst = sBB->getTerminator();
-      if (lastInst->getOpcode() == Instruction::Ret)
-        continue;
+      if (lastInst->getOpcode() == Instruction::Ret) continue;
 
       // 在每个基本块前插入后驱指令，其实就是 loopend 里的指令
       bInstBuilder.SetInsertPoint(sBB->getTerminator());
       for (auto &Inst : *loopEndBB) {
-        if (Inst.getOpcode() == Instruction::Br)
-          break;
+        if (Inst.getOpcode() == Instruction::Br) break;
 
         Instruction *instClone = Inst.clone();
         RemapInstruction(instClone, bbValMap, RF_IgnoreMissingLocals);

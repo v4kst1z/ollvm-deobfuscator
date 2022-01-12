@@ -7,10 +7,10 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
 set(CMAKE_CXX_STANDARD 14 CACHE STRING "")
 
-if(NOT LLVM_ENABLE_RTTI)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
-endif()
-
+#if(NOT LLVM_ENABLE_RTTI)
+#  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
+#endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
 include_directories(./include)
 
 add_library(DBogusFlow SHARED ./lib/DBogusFlow.cpp)
