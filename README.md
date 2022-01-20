@@ -1,11 +1,4 @@
-<!--
- * @Author: V4kst1z (dcydane@gmail.com)
- * @Date: 2021-08-19 18:22:30
- * @LastEditors: V4kst1z
- * @Description: 
- * @FilePath: /ollvm-deobfuscator/README.md
--->
-# ollvm-deobfuscator
+# DEPRECATED
 ## 环境搭建
 ### ollvm 编译
 ```
